@@ -9,42 +9,51 @@
 
 // TODO invert binary values in tables and remove negation in code
 
-#define TEST            1
+#define TEST            0
 #define VERBOSE         1
 
 #define I2C_BASE_ADDR   0x20
 #define READ_ADDR       0x4F
 #define WRITE_ADDR      0x4E
-#define NUM_UNITS       4
+#define NUM_UNITS       2    // 4
 #define NUM_SEGMENTS    8
 #define DIGIT_MAP_SIZE  10
 
+#define DECIMAL_POINT   0b00000010  // decimal point (display pin #3)
+#define SEGMENT_A       0b00000001  // bottom horizontal (display pin #2)
+#define SEGMENT_B       0b00000100  // right bottom vertical (display pin #7)
+#define SEGMENT_C       0b00001000  // left bottom vertical (display pin #8)
+#define SEGMENT_D       0b00010000  // middle horizontal (display pin #11)
+#define SEGMENT_E       0b00100000  // left top vertical (display pin #14)
+#define SEGMENT_F       0b01000000  // right top vertical (display pin #17)
+#define SEGMENT_G       0b10000000  // top horizontal (display pin #20)
 
-unsigned char c = 0;
+
+byte c = 0;
 
 PCF8574 afd[NUM_UNITS] = {
   PCF8574(I2C_BASE_ADDR),
-  PCF8574(I2C_BASE_ADDR + 1),
-  PCF8574(I2C_BASE_ADDR + 2),
-  PCF8574(I2C_BASE_ADDR + 3)
+  PCF8574(I2C_BASE_ADDR + 1)
+//  PCF8574(I2C_BASE_ADDR + 2),
+//  PCF8574(I2C_BASE_ADDR + 3)
 };
 
-unsigned char digitMap[DIGIT_MAP_SIZE] = {
-  0b00000001 + 0b00000100 + 0b00100000 + 0b01000000, // 0
-  0b00100000, // 1
-  0b00000001 + 0b00001000 + 0b00010000 + 0b01000000, // 2
-  0b00000001 + 0b00000010 + 0b00010000 + 0b01000000, // 3
-  0b00000100 + 0b00010000 + 0b10000000, // 4
-  0b00000001 + 0b00000010 + 0b01000000 + 0b10000000, // 5
-  0b00000001 + 0b00000010 + 0b00001000 + 0b01000000 + 0b10000000, // 6
-  0b00000100 + 0b01000000, // 7
-  0b00000001 + 0b00000010 + 0b00001000 + 0b00010000 + 0b01000000 + 0b10000000, // 8
-  0b00000100 + 0b00010000 + 0b01000000 + 0b10000000 // 9
+byte digitMap[DIGIT_MAP_SIZE] = {
+  SEGMENT_A + SEGMENT_B + SEGMENT_C + SEGMENT_E + SEGMENT_F + SEGMENT_G, // 0
+  SEGMENT_B + SEGMENT_F, // 1
+  SEGMENT_A + SEGMENT_C + SEGMENT_D + SEGMENT_F + SEGMENT_G, // 2
+  SEGMENT_A + SEGMENT_B + SEGMENT_D + SEGMENT_F + SEGMENT_G, // 3
+  SEGMENT_B + SEGMENT_D + SEGMENT_E + SEGMENT_F, // 4
+  SEGMENT_A + SEGMENT_B + SEGMENT_D + SEGMENT_E + SEGMENT_G, // 5
+  SEGMENT_A + SEGMENT_B + SEGMENT_C + SEGMENT_D + SEGMENT_E + SEGMENT_G, // 6
+  SEGMENT_B + SEGMENT_F + SEGMENT_G, // 7
+  SEGMENT_A + SEGMENT_B + SEGMENT_C + SEGMENT_D + SEGMENT_E + SEGMENT_F + SEGMENT_G, // 8
+  SEGMENT_B + SEGMENT_D + SEGMENT_E + SEGMENT_F + SEGMENT_G // 9
 };
 
 
-void clearUnit(unsigned char unit) {
-  unsigned char seg;
+void clearUnit(byte unit) {
+  byte seg;
   for (seg = 0; seg < NUM_SEGMENTS; seg++) {
     afd[unit].digitalWrite(seg, HIGH);
   }
@@ -52,7 +61,7 @@ void clearUnit(unsigned char unit) {
 
 
 void clearAllUnits() {
-  unsigned char unit;
+  byte unit;
   for (unit = 0; unit < NUM_UNITS; unit++) {
     clearUnit(unit);
   }
@@ -74,7 +83,7 @@ void condPrintln(String s) {
 
 
 void setup() { 
-  unsigned char unit;
+  byte unit;
 
   Serial.begin(9600);
   delay(500);
@@ -96,28 +105,33 @@ void setup() {
 }
 
 
-void writeDigit(unsigned char unit, unsigned char digit) { 
-  unsigned char chr;
+void enableSegments(byte unit, byte segments) {
   PCF8574::DigitalInput digitalInput;
 
-  chr = digitMap[digit % DIGIT_MAP_SIZE];
-  digitalInput.p7 = !((chr >> 7) & 0x01);
-  digitalInput.p6 = !((chr >> 6) & 0x01);
-  digitalInput.p5 = !((chr >> 5) & 0x01);
-  digitalInput.p4 = !((chr >> 4) & 0x01);
-  digitalInput.p3 = !((chr >> 3) & 0x01);
-  digitalInput.p2 = !((chr >> 2) & 0x01);
-  digitalInput.p1 = !((chr >> 1) & 0x01);
-  digitalInput.p0 = !((chr >> 0) & 0x01);
+  digitalInput.p7 = !((segments >> 7) & 0x01);
+  digitalInput.p6 = !((segments >> 6) & 0x01);
+  digitalInput.p5 = !((segments >> 5) & 0x01);
+  digitalInput.p4 = !((segments >> 4) & 0x01);
+  digitalInput.p3 = !((segments >> 3) & 0x01);
+  digitalInput.p2 = !((segments >> 2) & 0x01);
+  digitalInput.p1 = !((segments >> 1) & 0x01);
+  digitalInput.p0 = !((segments >> 0) & 0x01);
 
   afd[unit % NUM_UNITS].digitalWriteAll(digitalInput);
-  condPrint("writeDigit: 0x" +  String(chr, HEX) + "; ");
+}
+
+
+void writeDigit(byte unit, byte digit) { 
+  byte chr;
+
+  chr = digitMap[digit % DIGIT_MAP_SIZE];
+  enableSegments(unit, chr);
 }
 
 
 void loop() {
-  unsigned char unit;
-  unsigned char seg;
+  byte unit;
+  byte seg;
 
   switch (TEST) {
     case 0:
@@ -128,7 +142,20 @@ void loop() {
         condPrintln("Digit: " + String((c + unit) % DIGIT_MAP_SIZE));
       }
       c++;
-      println("-------------");
+      condPrintln("-------------");
+      break;
+    case 1:
+      // turn on all segments on all units
+      for (unit = 0; unit < NUM_UNITS; unit++) {
+        condPrint("Unit: " + String(unit) + "; Segments: ");
+        for (seg = 0; seg < NUM_SEGMENTS; seg++) {
+          enableSegments(unit, (1 << seg));
+          condPrint("0x" + String((1 << seg), HEX) + ", ");
+          delay(1000);
+        }
+        enableSegments(unit, 0);
+        condPrintln(";");
+      }
       break;
     case 2:
       // cycle through all segments on all units
@@ -149,7 +176,7 @@ void loop() {
       break;
     case 3:
       // enable a single segment on each unit
-      unsigned char s;
+      byte s;
       for (seg = 0; seg < NUM_SEGMENTS; seg++) {
         for (unit = 0; unit < NUM_UNITS; unit++) {
           s = (seg + unit) % NUM_SEGMENTS;
