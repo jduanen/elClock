@@ -6,10 +6,10 @@
 
 #include "Arduino.h"
 #include "PCF8574.h"
+#include "DS3232RTC.h"      // https://github.com/JChristensen/DS3232RTC
 
-// TODO invert binary values in tables and remove negation in code
 
-#define TEST            0
+#define TEST            5
 #define VERBOSE         1
 
 #define I2C_BASE_ADDR   0x20
@@ -30,6 +30,8 @@
 
 
 byte c = 0;
+
+DS3232RTC rtc;
 
 PCF8574 afd[NUM_UNITS] = {
   PCF8574(I2C_BASE_ADDR),
@@ -82,6 +84,31 @@ void condPrintln(String s) {
 }
 
 
+void digitalClockDisplay() {
+  // digital clock display of the time
+  Serial.print(hour());
+  printDigits(minute());
+  printDigits(second());
+  Serial.print(' ');
+  Serial.print(day());
+  Serial.print(' ');
+  Serial.print(month());
+  Serial.print(' ');
+  Serial.print(year());
+  Serial.println();
+}
+
+
+void printDigits(int digits) {
+  // utility function for digital clock display: prints preceding colon and leading 0
+  Serial.print(':');
+  if(digits < 10) {
+      Serial.print('0');
+  }
+  Serial.print(digits);
+}
+
+
 void setup() { 
   byte unit;
 
@@ -100,6 +127,14 @@ void setup() {
     afd[unit].begin();
   }
   clearAllUnits();
+
+  rtc.begin();
+  setSyncProvider(rtc.get);
+  if(timeStatus() != timeSet) {
+    Serial.println("Unable to sync with the RTC");
+  } else {
+    Serial.println("RTC has set the system time");
+  }
 
   condPrintln("Start");
 }
@@ -199,6 +234,20 @@ void loop() {
         delay(1000);
         condPrintln("Segment: " + String(seg));
       }
+      break;
+    case 5:
+      // read and display from RTC module
+      int sec, d0, d1;
+      sec = second();
+      d0 = (sec % 10);
+      d1 = ((sec / 10) % 10);
+      condPrintln("D1: " + String(d1) + ", D0: " + String(d0));
+
+      if (false) {
+        digitalClockDisplay();
+      }
+      writeDigit(0, d0);
+      writeDigit(1, d1);
       break;
     default:
       condPrintln("Invalid Test");
