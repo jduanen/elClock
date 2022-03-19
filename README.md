@@ -3,6 +3,9 @@ Display made with four 7-Segment electroluminescent display units
 
 Works with [Alien Font Display driver board](https://github.com/jduanen/alienFontDisplay)
 
+Running in timer mode
+![EL Timer](eltimer.gif)
+
 *TBD*
 
 ## IEL-O-VI C63.396.208-01
@@ -39,7 +42,19 @@ Works with [Alien Font Display driver board](https://github.com/jduanen/alienFon
   - 32K EEPROM
   - 3.3-5.5V
   - I2C @ 400KHz
-  - 
+
+* TBD
+  - instrument using SensorNet library
+  - use SensorNet to subscribe to time set broadcast
+    * create a cron job that publishes time periodically
+      - send multiple samples in a burst
+    * update RTC if delta exists between it and majority of samples
+  - consider muxing display units to extend lifetime of units
+  - build SWMP to drive the segments at 225VAC @ 400Hz
+    * 4mA per segment, max of 28 segments on: <120mA @ 225VAC (<30W)
+
+* Notes
+  - run driver on 5V, but can use 3V3 GPIOs from ESP12F to drive the I2C bus to all the port exapanders and the RTC
 
 =======================================================================================
 
@@ -52,6 +67,7 @@ Works with [Alien Font Display driver board](https://github.com/jduanen/alienFon
   - https://www.acmesystems.it/ESP12
   - https://www.parallax.com/product/ds3231-at24c32-real-time-clock-module/
   - https://www.parallax.com/package/ds3231-datasheet/
+  - https://github.com/JChristensen/DS3232RTC
 
 * notes
   - HV PSU:
