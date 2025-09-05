@@ -1,4 +1,4 @@
-# elClock
+# EL Clock
 Display made with four 7-Segment electroluminescent display units
 
 Works with [Alien Font Display driver board](https://github.com/jduanen/alienFontDisplay)
