@@ -15,7 +15,7 @@
 #define I2C_BASE_ADDR   0x20
 #define READ_ADDR       0x4F
 #define WRITE_ADDR      0x4E
-#define NUM_UNITS       2    // 4
+#define NUM_UNITS       4
 #define NUM_SEGMENTS    8
 #define DIGIT_MAP_SIZE  10
 
@@ -35,9 +35,9 @@ DS3232RTC rtc;
 
 PCF8574 afd[NUM_UNITS] = {
   PCF8574(I2C_BASE_ADDR),
-  PCF8574(I2C_BASE_ADDR + 1)
-//  PCF8574(I2C_BASE_ADDR + 2),
-//  PCF8574(I2C_BASE_ADDR + 3)
+  PCF8574(I2C_BASE_ADDR + 1),
+  PCF8574(I2C_BASE_ADDR + 2),
+  PCF8574(I2C_BASE_ADDR + 3)
 };
 
 byte digitMap[DIGIT_MAP_SIZE] = {
@@ -109,6 +109,97 @@ void printDigits(int digits) {
 }
 
 
+void printDateTime(time_t t) {
+  printDate(t);
+  Serial.print(' ');
+  printTime(t);
+}
+
+
+void printTime(time_t t) {
+  printI00(hour(t), ':');
+  printI00(minute(t), ':');
+  printI00(second(t), ' ');
+}
+
+
+void printDate(time_t t) {
+  printI00(day(t), 0);
+  Serial.print(monthShortStr(month(t)));
+  Serial.print(String(year(t), DEC));
+}
+
+
+// Print an integer in "00" format (with leading zero), followed by a
+//  delimiter character.
+// Input value assumed to be between 0 and 99
+void printI00(int val, char delim) {
+    if (val < 10) {
+      Serial.print('0');
+    }
+    Serial.print(String(val, DEC));
+    if (delim > 0) {
+      Serial.print(delim);
+    }
+}
+
+
+// prompt on serial line and get time/date string in format: [YY]YY,M,D,H,m,S
+// all values are ints, no spaces, year is either four digits or last two digits
+// 
+void timeInput() {
+  int year, month, day, hour, minute, second;
+
+  while (true) {
+    Serial.print("> ");
+    while (Serial.peek() != '\r') {};
+    if (Serial.available() >= 12) {
+      year = Serial.parseInt();
+      if ((year >= 100) && (year < 1000)) {
+        Serial.println("\nInvalid DateTime: try again");
+        continue;
+      } else {
+        if (year >= 1000) {
+          year = CalendarYrToTm(year);
+        } else {
+          year = y2kYearToTm(year);
+        }
+      }
+      month = Serial.parseInt();
+      day = Serial.parseInt();
+      hour = Serial.parseInt();
+      minute = Serial.parseInt();
+      second = Serial.parseInt();
+      break;
+    } else {
+      Serial.println("\nInvalid DateTime: try again");
+      continue;
+    }
+  }
+  setMCUTime(year, month, day, hour, minute, second);
+}
+
+void setMCUTime(int year, int month, int day, int hour, int minute, int second) {
+  time_t t;
+  tmElements_t tm;
+
+  if (year >= 1000) {
+    tm.Year = CalendarYrToTm(year);
+  } else {
+    tm.Year = y2kYearToTm(year);
+  }
+  tm.Month = month;
+  tm.Day = day;
+  tm.Hour = hour;
+  tm.Minute = minute;
+  tm.Second = second;
+  t = makeTime(tm);
+  rtc.set(t);
+  setTime(t);
+  printDateTime(t);
+}
+
+
 void setup() { 
   byte unit;
 
@@ -136,11 +227,15 @@ void setup() {
     Serial.println("RTC has set the system time");
   }
 
+  //// TODO add option to startup
+
   condPrintln("Start");
 }
 
 
 void enableSegments(byte unit, byte segments) {
+  // Enable the segments selected in the bit mask 'segments' for the display
+  //  given by 'unit'.
   PCF8574::DigitalInput digitalInput;
 
   digitalInput.p7 = !((segments >> 7) & 0x01);
@@ -153,6 +248,24 @@ void enableSegments(byte unit, byte segments) {
   digitalInput.p0 = !((segments >> 0) & 0x01);
 
   afd[unit % NUM_UNITS].digitalWriteAll(digitalInput);
+}
+
+
+void disableSegments(byte unit) {
+  // Disable all segments for the display given by 'unit'.
+  enableSegments(unit, 0);
+}
+
+
+void enableDecimalPoint(byte unit) {
+  // Enable the decimal point on the given unit.
+  afd[unit % NUM_UNITS].digitalWrite(P1, 0);
+}
+
+
+void disableDecimalPoint(byte unit) {
+  // Disable the decimal point on the given unit.
+  afd[unit % NUM_UNITS].digitalWrite(P1, 1);
 }
 
 
@@ -188,7 +301,7 @@ void loop() {
           condPrint("0x" + String((1 << seg), HEX) + ", ");
           delay(1000);
         }
-        enableSegments(unit, 0);
+        disableSegments(unit);
         condPrintln(";");
       }
       break;
@@ -237,17 +350,35 @@ void loop() {
       break;
     case 5:
       // read and display from RTC module
-      int sec, d0, d1;
+      int sec, min, hr, d0, d1, d2, d3;
       sec = second();
       d0 = (sec % 10);
       d1 = ((sec / 10) % 10);
-      condPrintln("D1: " + String(d1) + ", D0: " + String(d0));
+      min = minute();
+      d2 = (min % 10);
+      d3 = ((min / 10) % 10);
+      hr = hour();
+      condPrintln("D3: " + String(d3) + ", D2: " + String(d2) + ", D1: " + String(d1) + ", D0: " + String(d0));
 
       if (false) {
         digitalClockDisplay();
       }
-      writeDigit(0, d0);
-      writeDigit(1, d1);
+      writeDigit(3, d0);
+      writeDigit(2, d1);
+      writeDigit(1, d2);
+      writeDigit(0, d3);
+      enableDecimalPoint(1);
+      break;
+    case 6:
+      // Alternate turning all segments on for 1 sec and off for one sec on for all units.
+      for (unit = 0; unit < NUM_UNITS; unit++) {
+        condPrint("Unit: " + String(unit) + "; All Segments On; ");
+        enableSegments(unit, 0xFF);
+        delay(1000);
+        condPrintln("All Segments Off.");
+        disableSegments(unit);
+        delay(1000);
+      }
       break;
     default:
       condPrintln("Invalid Test");
